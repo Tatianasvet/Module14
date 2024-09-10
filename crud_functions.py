@@ -7,9 +7,20 @@ description_list = ['Витаминки с Омегой-3, типа для ве�
                     'Слабительное под видом чая']
 
 
-def initiate_db():
-    connection = sqlite3.connect("Products.db")
-    cursor = connection.cursor()
+def connection_session(func):
+
+    def wrapper(*args):
+        connection = sqlite3.connect("My_shop.db")
+        cursor = connection.cursor()
+        result = func(*args, cursor=cursor)
+        connection.commit()
+        connection.close()
+        return result
+    return wrapper
+
+
+@connection_session
+def initiate_db(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Products(
         id INTEGER PRIMARY KEY,
@@ -18,25 +29,46 @@ def initiate_db():
         price INTEGER NOT NULL
         )
     """)
-    connection.commit()
-    connection.close()
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Users(
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL,
+    email TEXT NOT NULL,
+    age INTEGER NOT NULL,
+    balance INTEGER NOT NULL
+    )
+    ''')
 
 
-def get_all_products():
-    connection = sqlite3.connect("Products.db")
-    cursor = connection.cursor()
+@connection_session
+def add_user(username, email, age, cursor):
+    check_user = cursor.execute("SELECT * FROM Users WHERE username=?", (username,))
+    if check_user.fetchone() is None:
+        cursor.execute("SELECT MAX(id) FROM Users")
+        last_id = cursor.fetchone()[0]
+        if last_id is None:
+            last_id = 0
+        cursor.execute(f'''
+        INSERT INTO Users VALUES('{last_id + 1}', '{username}', '{email}', '{age}', 1000)
+        ''')
+
+
+@connection_session
+def is_included(username, cursor):
+    check_user = cursor.execute("SELECT * FROM Users WHERE username=?", (username,))
+    if check_user.fetchone() is None:
+        return False
+    return True
+
+
+@connection_session
+def get_all_products(cursor):
     cursor.execute('SELECT * FROM Products')
-    result = cursor.fetchall()
-    connection.commit()
-    connection.close()
-    return result
+    return cursor.fetchall()
 
 
-def setup():
-    connection = sqlite3.connect("Products.db")
-    cursor = connection.cursor()
+@connection_session
+def setup(cursor):
     for i in range(1, 5):
         cursor.execute('INSERT INTO Products(id, title, description, price) VALUES(?, ?, ?, ?)',
                        (f'{i}', f'{product_name_list[i - 1]}', f'{description_list[i - 1]}', i * 100))
-    connection.commit()
-    connection.close()
